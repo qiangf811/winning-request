@@ -1,6 +1,6 @@
 import axios from 'axios'
 import Cookies from 'js-cookie'
-import { Message } from 'element-ui'
+import Message from 'element-ui/lib/message'
 
 const isPro = process.env.NODE_ENV === 'production'
 const { CancelToken } = axios
