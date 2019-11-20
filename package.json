@@ -1,0 +1,9 @@
+{
+  "name": "winning-request",
+  "version": "1.0.0",
+  "description": "request for winning-finance",
+  "main": "request.js",
+  "author": "smallalso <hu141418@gmail.com>",
+  "license": "MIT",
+  "private": true
+}
