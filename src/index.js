@@ -1,14 +1,15 @@
 import axios from 'axios'
 import Cookies from 'js-cookie'
-import Message from 'element-ui/lib/message'
 
 const isPro = process.env.NODE_ENV === 'production'
 const { CancelToken } = axios
-const DEFAULTOPTION = { // 默认选项
-  method: 'post',
-  warning: true,
-  login: true
-}
+// const DEFAULTOPTION = { // 默认选项
+//   method: 'post',
+//   warning: true,
+//   checkWarning: true,
+//   login: true,
+//   isAddSoid: true
+// }
 
 export class Request {
   constructor (config) {
@@ -17,14 +18,22 @@ export class Request {
       baseURL: baseURL,
       timeout: 100000
     })
+    this.Message = config.Message || null
+    this.defaultOption = Object.assign({ // 默认选项
+      method: 'post',
+      warning: true,
+      checkWarning: true,
+      login: true,
+      isAddSoid: true
+    }, config)
     // 添加请求拦截
-    Request.requestInterceptor(this.service)
+    Request.requestInterceptor(this.service, this.Message)
     // 添加返回拦截
-    Request.responseInterceptor(this.service)
+    Request.responseInterceptor(this.service, this.Message)
   }
 
   // 设置请求头参数
-  static getCookies() {
+  static getCookies () {
     return {
       Authorization: Cookies.get('BEARER_TOKEN'),
       'W-FLOW': Cookies.get('W-FLOW') || 'default',
@@ -32,7 +41,7 @@ export class Request {
       ip: Cookies.get('ip') || 'http://127.0.0.1'
     }
   }
-  static getMessage(code, str) {
+  static getMessage (code, str) {
     if (!str) return 0
     const matchStr = str.split(`${code}:`)
     const re = /[\u4e00-\u9fa5]+/
@@ -43,47 +52,70 @@ export class Request {
 
   static requestInterceptor (service) {
     // 添加 token
+     function getUserInfo () {
+      const userInfo = Cookies.get('userInfo')
+      return userInfo ? JSON.parse(userInfo) : null
+    }
+    let userInfo = getUserInfo()
     service.interceptors.request.use((conf) => {
+      const userConf = conf.headers['x-user-config']
       const {
-        data, checkFn, source, refixFn
-      } = conf
-      if (data && refixFn) {
-        conf.data = refixFn(data)
+        checkFn, refixFn, source, isAddSoid, checkWarning
+      } = userConf
+      // 提交前处理数据
+      if (conf.data && refixFn) {
+        conf.data = refixFn(conf.data)
       }
-      if (data && checkFn) {
-        const message = checkFn(data)
+      // 提交前数据校验
+      if (conf.data && checkFn) {
+        const message = checkFn(conf.data)
         if (message) {
-          source.cancel(message)
+          source.cancel({ text: message, warning: checkWarning })
         }
       }
+      // 无userInfo 重新获取userInfo
+      if (!userInfo) {
+        userInfo = getUserInfo()
+      }
+      // 统一添加 hospitalSOID
+      if (isAddSoid && userInfo && userInfo.hospitalSOID) {
+        if (!conf.data) {
+          conf.data = {}
+        }
+        conf.data.hospitalSOID = userInfo.hospitalSOID
+      }
+      // 删除配置信息
+      conf.headers['x-user-config'] = null
       // 添加系统参数
       conf.headers.common = Object.assign(conf.headers.common, Request.getCookies())
       return conf
     })
   }
 
-  static responseInterceptor (service) {
+  static responseInterceptor (service, Message) {
     service.interceptors.response.use(res => res.data, (err) => {
+      let { message = `请求失败, 服务端无响应${err}` } = err
+      if (message.warning === false) {
+        return Promise.reject(message.text || message)
+      }
+      if (message.warning && message.text) {
+        message = message.text
+      }
       Message({
-        message: err.message || (`请求失败, 服务端无响应${err}`),
-        type: err.message ? 'warning' : 'error',
+        message,
+        type: 'error',
         duration: 4500
       })
-      return Promise.reject(err)
+      return Promise.reject(message.text || message || '请求失败, 服务端无响应')
     })
   }
 
-  static handle (data, conf) {
-    // 处理提交数据
-    if (conf.refixFn) {
-      data.refixFn = conf.refixFn
-    }
+  static handle (data, conf, self) {
     // 处理是否取消请求
     if (conf.checkFn) {
       const source = CancelToken.source()
-      data.checkFn = conf.checkFn
       data.cancelToken = source.token
-      data.source = source
+      conf.source =source
     }
     // loading 状态
     const setLoadingState = (bool) => {
@@ -92,10 +124,10 @@ export class Request {
       }
     }
     setLoadingState(true)
-    return this.service(data).then((res) => {
+    return self.service(data).then((res) => {
       setLoadingState(false)
-      if (res.success && conf.successTxt) {
-        Message({
+      if (res.success && conf.successTxt && conf.warning) {
+        self.Message({
           message: conf.successTxt,
           type: 'success',
           duration: conf.duration || 4500
@@ -105,7 +137,7 @@ export class Request {
         const { code, message } = res.errorDetail
         const tipTxt = (conf.failTxt || '') + (Request.getMessage(code, message) || '')
         if (tipTxt && tipTxt !== 'undefined') {
-          Message({
+          self.Message({
             message: tipTxt,
             type: 'error',
             duration: conf.duration || 4500
@@ -120,15 +152,19 @@ export class Request {
   }
 
   temp (url, conf = {}) {
+    const self =this
     return function factory (data, customer) {
-      const newConf = Object.assign({}, DEFAULTOPTION, conf, customer)
+      const newConf = Object.assign({}, self.defaultOption, conf, customer)
       const _data = {
         url,
         method: newConf.method,
-        [newConf.method === 'post' ? 'data' : 'params']: data || {}
+        [newConf.method === 'post' ? 'data' : 'params']: data || {},
+        headers: {
+          'x-user-config': newConf
+        }
       }
       const handle = this ? Request.handle.bind(this) : Request.handle
-      return handle(_data, newConf)
+      return handle(_data, newConf, self)
     }
   }
 }
