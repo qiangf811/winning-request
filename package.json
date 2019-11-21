@@ -1,6 +1,6 @@
 {
   "name": "@winning-plugin/request",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "request for winning-finance",
   "main": "dist/request.js",
   "author": "smallalso <hu141418@gmail.com>",
@@ -13,7 +13,9 @@
     "js-cookie": "^2.2.1"
   },
   "devDependencies": {
+    "@babel/core": "^7.7.2",
     "rollup": "^1.27.2",
+    "rollup-plugin-babel": "^4.3.3",
     "rollup-plugin-buble": "^0.19.8",
     "rollup-plugin-commonjs": "^10.1.0",
     "rollup-plugin-json": "^4.0.0",
