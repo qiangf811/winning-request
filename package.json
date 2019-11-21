@@ -1,11 +1,10 @@
 {
-  "name": "winning-request",
-  "version": "1.0.0",
+  "name": "@winning-plugin/request",
+  "version": "1.0.2",
   "description": "request for winning-finance",
   "main": "dist/request.js",
   "author": "smallalso <hu141418@gmail.com>",
   "license": "MIT",
-  "private": true,
   "scripts": {
     "build": "rollup -c"
   },
